@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-TOKEN = "8456273407:AAGhYGsfUOxkez419HnAoBSHypSbERSgrxU"
+import os
+TOKEN = os.getenv("TOKEN")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
