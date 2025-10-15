@@ -1,19 +1,33 @@
 import asyncio
 import json
 import os
+import threading
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from flask import Flask
 
-import os
+# === Flask (чтобы Render видел, что бот открыт на порту) ===
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "✅ Telegram pill bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+# === Telegram бот ===
 TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise ValueError("❌ Не найден токен! Добавь переменную окружения TOKEN в Render.")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 users = {}  # {user_id: {"took_pill": False}}
 
 USERS_FILE = "users.json"
-
 
 # ===== Работа с файлом =====
 def load_users():
@@ -24,18 +38,15 @@ def load_users():
     else:
         users = {}
 
-
 def save_users():
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
-
 
 # ===== Кнопка =====
 def get_pill_keyboard():
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text="💊 Я выпила", callback_data="took_pill"))
     return builder.as_markup()
-
 
 # ===== Когда кто-то пишет боту =====
 @dp.message()
@@ -47,7 +58,6 @@ async def register_user(message: types.Message):
         await message.answer("Привет, киска! 👋 Я буду напоминать тебе выпить таблетку каждый день в 22:00!")
     else:
         await message.answer("Я уже тебя помню 💊")
-
 
 # ===== Отправляем напоминание =====
 async def send_reminders():
@@ -62,7 +72,6 @@ async def send_reminders():
         )
         asyncio.create_task(reminder_loop(user_id))
 
-
 # ===== Проверка каждые 2 минуты =====
 async def reminder_loop(user_id):
     for _ in range(30):  # максимум 1 час
@@ -75,7 +84,6 @@ async def reminder_loop(user_id):
             reply_markup=get_pill_keyboard()
         )
 
-
 # ===== Когда человек нажимает кнопку =====
 @dp.callback_query(lambda c: c.data == "took_pill")
 async def pill_taken(callback: types.CallbackQuery):
@@ -85,7 +93,6 @@ async def pill_taken(callback: types.CallbackQuery):
         save_users()
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer("Отлично! 👏 Не забудь завтра тоже.")
-
 
 # ===== Основная функция =====
 async def main():
@@ -97,6 +104,9 @@ async def main():
     print("✅ Бот запущен и готов работать с несколькими пользователями!")
     await dp.start_polling(bot)
 
-
 if __name__ == "__main__":
+    # Запускаем Flask в отдельном потоке, чтобы Render видел открытый порт
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    # Запускаем бота
     asyncio.run(main())
